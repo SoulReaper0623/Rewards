@@ -1,0 +1,35 @@
+server:
+  port: 8083
+  error:
+    include-message: always
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/rewards}
+    username: ${SPRING_DATASOURCE_USERNAME:rewards_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:rewards_pass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        dialect:
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:DatabaseSchema
+    baseline-on-migrate: false

@@ -1,0 +1,35 @@
+services:
+
+  db:
+    image: postgres:15-alpine
+    container_name: rewards-db
+    environment:
+      POSTGRES_DB: rewards
+      POSTGRES_USER: rewards_user
+      POSTGRES_PASSWORD: rewards_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rewards_user -d rewards"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: rewards-app
+    ports:
+      - "8083:8083"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/rewards
+      SPRING_DATASOURCE_USERNAME: rewards_user
+      SPRING_DATASOURCE_PASSWORD: rewards_pass
+    restart: on-failure
+
+volumes:
+  postgres_data:
