@@ -1,0 +1,382 @@
+openapi: 3.0.3
+info:
+  title: Rewards Points Ledger API
+  description: API for managing member reward points — earn, redeem, and track balances.
+  version: "1.0"
+
+servers:
+  - url: http://localhost:8083
+    description: Local development server
+
+tags:
+  - name: Members
+    description: Member account management
+  - name: Rewards
+    description: Reward points ledger operations
+
+paths:
+  /members:
+    post:
+      tags:
+        - Members
+      summary: Create a new member account
+      operationId: createMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+            example:
+              name: Alice Smith
+              email: alice@example.com
+      responses:
+        '201':
+          description: Member created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberCreateResponse'
+              example:
+                member_id: 1
+                name: Alice Smith
+                email: alice@example.com
+                created_at: "2024-01-15T10:30:00Z"
+        '400':
+          description: Validation error — missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: VALIDATION_ERROR
+                message: "name must not be blank"
+                timestamp: "2024-01-15T10:30:00Z"
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 409
+                error: DUPLICATE_EMAIL
+                message: "Email alice@example.com is already registered"
+                timestamp: "2024-01-15T10:30:00Z"
+
+  /members/{memberId}:
+    get:
+      tags:
+        - Members
+      summary: Get member by ID including current points balance
+      operationId: getMember
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 1
+      responses:
+        '200':
+          description: Member found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberResponse'
+              example:
+                member_id: 1
+                name: Alice Smith
+                email: alice@example.com
+                points_balance: 350
+                created_at: "2024-01-15T10:30:00Z"
+        '404':
+          description: Member not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: MEMBER_NOT_FOUND
+                message: "Member with ID 1 not found"
+                timestamp: "2024-01-15T10:30:00Z"
+
+  /rewards:
+    post:
+      tags:
+        - Rewards
+      summary: Create a new reward entry
+      description: >
+        Points must be a positive value. The sign is applied automatically based on point_type_id:
+        1 (Purchase Earning), 2 (Referral Bonus), and 3 (Cashback) are CREDIT types;
+        4 (Redemption) is a DEBIT type.
+      operationId: createReward
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRequest'
+            example:
+              member_id: 1
+              point_type_id: 1
+              points: 100
+              description: "Points earned from purchase #ORD-9821"
+      responses:
+        '201':
+          description: Reward entry created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardResponse'
+              example:
+                reward_id: 42
+                member_id: 1
+                point_type_id: 1
+                points: 100
+                description: "Points earned from purchase #ORD-9821"
+                event_date: "2024-01-15T10:30:00Z"
+        '400':
+          description: Validation error or invalid point_type_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 400
+                error: INVALID_POINT_TYPE
+                message: "point_type_id must be between 1 and 4"
+                timestamp: "2024-01-15T10:30:00Z"
+        '404':
+          description: Member not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: MEMBER_NOT_FOUND
+                message: "Member with ID 1 not found"
+                timestamp: "2024-01-15T10:30:00Z"
+        '422':
+          description: Insufficient points balance for redemption
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 422
+                error: INSUFFICIENT_BALANCE
+                message: "Member does not have enough points to redeem"
+                timestamp: "2024-01-15T10:30:00Z"
+
+  /members/{memberId}/rewards:
+    get:
+      tags:
+        - Rewards
+      summary: Get all reward entries for a member
+      operationId: getMemberRewards
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          example: 1
+      responses:
+        '200':
+          description: List of reward entries (empty array if none exist)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RewardResponse'
+              example:
+                - reward_id: 42
+                  member_id: 1
+                  point_type_id: 1
+                  points: 100
+                  description: "Points earned from purchase #ORD-9821"
+                  event_date: "2024-01-15T10:30:00Z"
+                - reward_id: 43
+                  member_id: 1
+                  point_type_id: 4
+                  points: -50
+                  description: "Redeemed points for voucher"
+                  event_date: "2024-01-16T08:00:00Z"
+        '404':
+          description: Member not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 404
+                error: MEMBER_NOT_FOUND
+                message: "Member with ID 1 not found"
+                timestamp: "2024-01-15T10:30:00Z"
+
+components:
+  schemas:
+    MemberRequest:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+          description: Full name of the member
+          example: Alice Smith
+        email:
+          type: string
+          description: Unique email address of the member
+          example: alice@example.com
+
+    MemberCreateResponse:
+      type: object
+      properties:
+        member_id:
+          type: integer
+          format: int64
+          description: Unique member ID
+          example: 1
+        name:
+          type: string
+          description: Full name of the member
+          example: Alice Smith
+        email:
+          type: string
+          description: Email address of the member
+          example: alice@example.com
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp (UTC)
+          example: "2024-01-15T10:30:00Z"
+
+    MemberResponse:
+      type: object
+      properties:
+        member_id:
+          type: integer
+          format: int64
+          description: Unique member ID
+          example: 1
+        name:
+          type: string
+          description: Full name of the member
+          example: Alice Smith
+        email:
+          type: string
+          description: Email address of the member
+          example: alice@example.com
+        points_balance:
+          type: integer
+          format: int64
+          description: Current points balance (sum of all reward entries)
+          example: 350
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp (UTC)
+          example: "2024-01-15T10:30:00Z"
+
+    RewardRequest:
+      type: object
+      required:
+        - member_id
+        - point_type_id
+        - points
+      properties:
+        member_id:
+          type: integer
+          format: int64
+          description: ID of the member to credit or debit
+          example: 1
+        point_type_id:
+          type: integer
+          format: int64
+          description: >
+            Point type ID. Valid values:
+            1 = Purchase Earning (CREDIT),
+            2 = Referral Bonus (CREDIT),
+            3 = Cashback (CREDIT),
+            4 = Redemption (DEBIT)
+          enum: [1, 2, 3, 4]
+          example: 1
+        points:
+          type: integer
+          format: int64
+          description: Number of points — must be positive; sign applied automatically by type
+          minimum: 1
+          example: 100
+        description:
+          type: string
+          description: Optional description of the reward entry
+          example: "Points earned from purchase #ORD-9821"
+
+    RewardResponse:
+      type: object
+      properties:
+        reward_id:
+          type: integer
+          format: int64
+          description: Unique reward entry ID
+          example: 42
+        member_id:
+          type: integer
+          format: int64
+          description: ID of the member
+          example: 1
+        point_type_id:
+          type: integer
+          format: int64
+          description: Point type ID
+          example: 1
+        points:
+          type: integer
+          format: int64
+          description: Points value — positive for CREDIT types, negative for DEBIT types
+          example: 100
+        description:
+          type: string
+          description: Description of the reward entry
+          example: "Points earned from purchase #ORD-9821"
+        event_date:
+          type: string
+          format: date-time
+          description: Timestamp when the reward entry was recorded (UTC)
+          example: "2024-01-15T10:30:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          description: HTTP status code
+          example: 404
+        error:
+          type: string
+          description: Error code
+          enum:
+            - VALIDATION_ERROR
+            - INVALID_POINT_TYPE
+            - MEMBER_NOT_FOUND
+            - DUPLICATE_EMAIL
+            - INSUFFICIENT_BALANCE
+          example: MEMBER_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Member with ID 1 not found"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+          example: "2024-01-15T10:30:00Z"
